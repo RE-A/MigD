@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>MigD - 이관 결과</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
+        <div class="d-flex gap-2">
+            <a href="/migration" class="btn btn-sm btn-success">이관 실행</a>
+            <a href="/schema" class="btn btn-sm btn-outline-info">스키마 이관</a>
+            <a href="/presets" class="btn btn-sm btn-outline-light">프리셋 목록</a>
+        </div>
+    </div>
+</nav>
+<div class="container pb-5">
+    <h4 class="mb-1">이관 결과</h4>
+    <p class="text-muted small mb-4" th:if="${tgtHost}">
+        대상: <strong th:text="${tgtHost + '/' + tgtDb}"></strong>
+    </p>
+
+    <!-- 오류 배너 (실패가 하나라도 있을 때 상단에 강조) -->
+    <div th:if="${migrationResult != null and migrationResult.hasErrors()}"
+         class="alert alert-danger mb-4">
+        <h6 class="alert-heading fw-bold">⚠ 이관 중 오류가 발생했습니다</h6>
+        <ul class="mb-0 mt-2">
+            <li th:each="r : ${migrationResult.tableResults}"
+                th:if="${!r.success and r.errorMessage != null and !r.errorMessage.startsWith('이전 테이블')}">
+                <strong th:text="${r.fullTableName}"></strong>:
+                <code th:text="${r.errorMessage}" class="text-danger"></code>
+            </li>
+        </ul>
+        <hr class="my-2"/>
+        <p class="mb-0 small">PK 중복 오류인 경우 Target DB의 해당 테이블 데이터를 삭제한 뒤 재시도하세요.</p>
+    </div>
+
+    <div th:if="${migrationResult != null and !migrationResult.hasErrors()}"
+         class="alert alert-success mb-4">
+        ✔ 모든 테이블이 성공적으로 이관되었습니다.
+    </div>
+
+    <!-- 스키마 동기화 결과 -->
+    <div th:if="${schemaResults}" class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold">스키마 동기화</div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th>테이블</th>
+                    <th style="width:100px">상태</th>
+                    <th>메시지</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${schemaResults}">
+                    <td th:text="${r.schemaName + '.' + r.tableName}"></td>
+                    <td>
+                        <span th:if="${r.status.name() == 'CREATED'}"  class="badge bg-success">생성</span>
+                        <span th:if="${r.status.name() == 'SKIPPED'}"  class="badge bg-secondary">스킵</span>
+                        <span th:if="${r.status.name() == 'FAILED'}"   class="badge bg-danger">실패</span>
+                    </td>
+                    <td th:text="${r.message}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 데이터 이관 결과 -->
+    <div th:if="${migrationResult}" class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+            <span>데이터 이관 결과</span>
+            <span class="small fw-normal text-muted"
+                  th:text="${#temporals.format(migrationResult.executedAt, 'yyyy-MM-dd HH:mm:ss')}"></span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th>테이블</th>
+                    <th style="width:100px">이관 건수</th>
+                    <th>결과</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${migrationResult.tableResults}"
+                    th:classappend="${!r.success} ? 'table-danger' : ''">
+                    <td th:text="${r.fullTableName}"></td>
+                    <td class="text-end"
+                        th:text="${r.success} ? ${#numbers.formatInteger(r.rowsCopied, 1, 'COMMA')} : '-'"></td>
+                    <td>
+                        <span th:if="${r.success}" class="text-success fw-semibold">✔ 성공</span>
+                        <span th:unless="${r.success}" class="text-danger small fw-semibold">✘ 실패</span>
+                    </td>
+                </tr>
+                </tbody>
+                <tfoot class="table-light">
+                <tr>
+                    <td class="fw-semibold">합계</td>
+                    <td class="text-end fw-semibold"
+                        th:text="${#numbers.formatInteger(migrationResult.totalRowsCopied, 1, 'COMMA')}"></td>
+                    <td th:text="${migrationResult.successCount + '개 성공, ' + migrationResult.failCount + '개 실패'}"></td>
+                </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div th:if="${migrationResult == null and schemaResults == null}" class="text-center text-muted py-5">
+        표시할 결과가 없습니다.
+    </div>
+
+    <div class="d-flex gap-2">
+        <a href="/migration" class="btn btn-primary">다시 실행</a>
+        <a href="/" class="btn btn-outline-secondary">대시보드</a>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

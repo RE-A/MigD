@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  thymeleaf:
+    cache: false
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.migd.domain
+  configuration:
+    map-underscore-to-camel-case: true
+
+migd:
+  pg-dump-path: "/usr/bin/pg_dump"
+  source-db:
+    host: "localhost"
+    port: 5432
+    db: "testdb"
+    user: "testuser"
+    password: "testpass"

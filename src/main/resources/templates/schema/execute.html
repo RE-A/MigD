@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>MigD - 스키마 이관</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
+        <div class="d-flex gap-2">
+            <a href="/migration" class="btn btn-sm btn-success">이관 실행</a>
+            <a href="/schema" class="btn btn-sm btn-outline-info">스키마 이관</a>
+            <a href="/presets" class="btn btn-sm btn-outline-light">프리셋 목록</a>
+        </div>
+    </div>
+</nav>
+<div class="container pb-5" style="max-width: 760px;">
+    <h4 class="mb-4">스키마 이관 (DDL 동기화)</h4>
+    <p class="text-muted small mb-4">
+        Source DB에서 지정한 스키마의 모든 오브젝트(테이블, 뷰, 시퀀스, 함수 등)를 데이터 없이 Target DB에 적용합니다.
+    </p>
+
+    <!-- 처리 결과 -->
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show mb-4">
+        <strong>오류:</strong> <span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div th:if="${dumpResult}" class="mb-4">
+        <div th:if="${dumpResult.success()}" class="alert alert-success">
+            ✔ 스키마 이관 완료 — 스키마:
+            <strong th:text="${dumpResult.schemaName()}"></strong>,
+            적용 DDL: <strong th:text="${dumpResult.statementCount()}"></strong>개
+            <span th:if="${tgtHost}" class="ms-2 text-muted small">
+                → <span th:text="${tgtHost + '/' + tgtDb}"></span>
+            </span>
+        </div>
+        <div th:unless="${dumpResult.success()}" class="alert alert-danger">
+            <strong>✘ 스키마 이관 실패</strong>
+            <pre class="mt-2 mb-0 small" th:text="${dumpResult.message()}"></pre>
+        </div>
+    </div>
+
+    <form th:action="@{/schema/run}" th:object="${request}" method="post" id="schemaForm">
+
+        <!-- Source DB (읽기 전용) -->
+        <div class="card mb-4 shadow-sm border-secondary">
+            <div class="card-header fw-semibold d-flex align-items-center gap-2">
+                Source DB (QA DB)
+                <span class="badge bg-secondary fw-normal">서버 설정 고정</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted mb-1">Host</label>
+                        <input type="text" class="form-control form-control-sm bg-light"
+                               th:value="${sourceDbHost}" readonly/>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">Port</label>
+                        <input type="text" class="form-control form-control-sm bg-light"
+                               th:value="${sourceDbPort}" readonly/>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted mb-1">Database</label>
+                        <input type="text" class="form-control form-control-sm bg-light"
+                               th:value="${sourceDbDb}" readonly/>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Target DB -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header fw-semibold">Target DB (로컬 DB)</div>
+            <div class="card-body row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Host <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" th:field="*{tgtHost}" id="tgtHost"
+                           required placeholder="localhost" oninput="validateAwsHost(this)"/>
+                    <div id="hostError" class="text-danger small mt-1" style="display:none;"></div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Port</label>
+                    <input type="number" class="form-control" th:field="*{tgtPort}"/>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Database <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" th:field="*{tgtDb}" required/>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">User <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" th:field="*{tgtUser}" required/>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" th:field="*{tgtPassword}"/>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-primary w-100"
+                            onclick="testConn()">연결 테스트</button>
+                </div>
+                <div class="col-12">
+                    <div id="connTestResult" class="small"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 스키마명 -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header fw-semibold">이관할 스키마</div>
+            <div class="card-body row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">스키마명 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" th:field="*{schemaName}"
+                           required placeholder="public"/>
+                    <div class="form-text">지정한 스키마의 모든 DDL을 Target DB에 적용합니다.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-info text-white">스키마 이관 실행</button>
+            <a href="/" class="btn btn-outline-secondary">취소</a>
+        </div>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function isAwsHost(host) {
+        const h = (host || '').toLowerCase();
+        return /\.amazonaws\.com$/.test(h)
+            || /\.rds\./.test(h)
+            || /\.elasticache\./.test(h)
+            || /\.aws\./.test(h);
+    }
+
+    function validateAwsHost(input) {
+        const errDiv = document.getElementById('hostError');
+        if (isAwsHost(input.value)) {
+            errDiv.textContent = 'AWS 클라우드 주소는 Target DB로 사용할 수 없습니다.';
+            errDiv.style.display = 'block';
+            input.classList.add('is-invalid');
+        } else {
+            errDiv.style.display = 'none';
+            input.classList.remove('is-invalid');
+        }
+    }
+
+    document.getElementById('schemaForm').addEventListener('submit', function(e) {
+        const host = document.getElementById('tgtHost').value;
+        if (isAwsHost(host)) {
+            e.preventDefault();
+            document.getElementById('hostError').textContent = 'AWS 클라우드 주소는 Target DB로 사용할 수 없습니다.';
+            document.getElementById('hostError').style.display = 'block';
+            document.getElementById('tgtHost').focus();
+        }
+    });
+
+    function testConn() {
+        const host     = document.querySelector('[name="tgtHost"]').value;
+        const port     = document.querySelector('[name="tgtPort"]').value;
+        const db       = document.querySelector('[name="tgtDb"]').value;
+        const user     = document.querySelector('[name="tgtUser"]').value;
+        const password = document.querySelector('[name="tgtPassword"]').value;
+        const resultEl = document.getElementById('connTestResult');
+
+        if (isAwsHost(host)) {
+            resultEl.innerHTML = '<span class="text-danger">✘ AWS 주소는 사용할 수 없습니다.</span>';
+            return;
+        }
+
+        resultEl.innerHTML = '<span class="text-muted">연결 중...</span>';
+        const params = new URLSearchParams({ host, port, db, user, password });
+        fetch('/presets/test-connection', { method: 'POST', body: params })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    resultEl.innerHTML = `<span class="text-success">✔ 연결 성공: ${data.version}</span>`;
+                } else {
+                    resultEl.innerHTML = `<span class="text-danger">✘ 연결 실패: ${data.message}</span>`;
+                }
+            })
+            .catch(e => {
+                resultEl.innerHTML = `<span class="text-danger">✘ 오류: ${e.message}</span>`;
+            });
+    }
+</script>
+</body>
+</html>
