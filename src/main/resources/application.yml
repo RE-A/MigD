@@ -45,8 +45,8 @@ migd:
   pg-dump-path: "C:/Program Files/PostgreSQL/16/bin/pg_dump.exe"
   # Source DB (QA DB) 설정 - 사용자가 화면에서 변경 불가
   source-db:
-    host: "qa-db.example.com"
-    port: 5432
-    db: "qadb"
-    user: "qauser"
-    password: "qapassword"
+    host: "localhost"
+    port: 5433
+    db: "sourcedb"
+    user: "migd"
+    password: "migd1234"

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.migd.mapper.CatalogColumnMapper">
+
+    <resultMap id="rm" type="CatalogColumn">
+        <id     property="id"               column="id"/>
+        <result property="catalogTableId"   column="catalog_table_id"/>
+        <result property="catalogId"        column="catalog_id"/>
+        <result property="schemaName"       column="schema_name"/>
+        <result property="tableName"        column="table_name"/>
+        <result property="columnName"       column="column_name"/>
+        <result property="columnNameLower"  column="column_name_lower"/>
+        <result property="dataType"         column="data_type"/>
+        <result property="ordinalPosition"  column="ordinal_position"/>
+        <result property="isNullable"       column="is_nullable"/>
+        <result property="isPk"             column="is_pk"/>
+        <result property="columnComment"    column="column_comment"/>
+    </resultMap>
+
+    <select id="findByTableId" parameterType="long" resultMap="rm">
+        SELECT * FROM CATALOG_COLUMN
+        WHERE catalog_table_id = #{catalogTableId}
+        ORDER BY ordinal_position
+    </select>
+
+    <!--
+        컬럼명 키워드 검색.
+        catalog_id 조건이 선행되어 idx_cc_catalog_lower 인덱스로 범위 축소 후 LIKE 스캔.
+        catalogId null이면 전체 카탈로그 대상.
+    -->
+    <select id="searchByColumnName" resultMap="rm">
+        SELECT * FROM CATALOG_COLUMN
+        WHERE (
+            column_name_lower LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            OR LOWER(column_comment) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+        )
+        <if test="catalogId != null">
+            AND catalog_id = #{catalogId}
+        </if>
+        ORDER BY schema_name, table_name, ordinal_position
+    </select>
+
+    <insert id="batchInsert">
+        INSERT INTO CATALOG_COLUMN
+            (catalog_table_id, catalog_id, schema_name, table_name,
+             column_name, column_name_lower, data_type,
+             ordinal_position, is_nullable, is_pk, column_comment)
+        VALUES
+        <foreach collection="list" item="c" separator=",">
+            (#{c.catalogTableId}, #{c.catalogId}, #{c.schemaName}, #{c.tableName},
+             #{c.columnName}, #{c.columnNameLower}, #{c.dataType},
+             #{c.ordinalPosition}, #{c.isNullable}, #{c.isPk}, #{c.columnComment})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByCatalogId" parameterType="long">
+        DELETE FROM CATALOG_COLUMN WHERE catalog_id = #{catalogId}
+    </delete>
+
+</mapper>

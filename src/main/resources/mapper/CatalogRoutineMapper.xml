@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.migd.mapper.CatalogRoutineMapper">
+
+    <resultMap id="rm" type="CatalogRoutine">
+        <id     property="id"          column="id"/>
+        <result property="catalogId"   column="catalog_id"/>
+        <result property="schemaName"  column="schema_name"/>
+        <result property="routineName" column="routine_name"/>
+        <result property="routineType" column="routine_type"/>
+        <result property="ddlBody"     column="ddl_body"/>
+    </resultMap>
+
+    <select id="findByCatalogId" parameterType="long" resultMap="rm">
+        SELECT * FROM CATALOG_ROUTINE
+        WHERE catalog_id = #{catalogId}
+        ORDER BY routine_name
+    </select>
+
+    <select id="findById" parameterType="long" resultMap="rm">
+        SELECT * FROM CATALOG_ROUTINE WHERE id = #{id}
+    </select>
+
+    <!--
+        DDL 본문 키워드 검색.
+        catalog_id 인덱스로 범위 축소 후 CLOB INSTR 스캔.
+        catalogId null이면 전체 카탈로그 대상.
+    -->
+    <select id="searchByBody" resultMap="rm">
+        SELECT * FROM CATALOG_ROUTINE
+        WHERE INSTR(LOWER(ddl_body), LOWER(#{keyword})) > 0
+        <if test="catalogId != null">
+            AND catalog_id = #{catalogId}
+        </if>
+        ORDER BY schema_name, routine_name
+    </select>
+
+    <!--
+        루틴명 키워드 검색 (컬럼명 검색 결과의 연관 루틴 조회용).
+        idx_cr_catalog_name 인덱스 활용.
+    -->
+    <select id="searchByName" resultMap="rm">
+        SELECT id, catalog_id, schema_name, routine_name, routine_type
+        FROM CATALOG_ROUTINE
+        WHERE LOWER(routine_name) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+        <if test="catalogId != null">
+            AND catalog_id = #{catalogId}
+        </if>
+        ORDER BY schema_name, routine_name
+    </select>
+
+    <insert id="batchInsert">
+        INSERT INTO CATALOG_ROUTINE
+            (catalog_id, schema_name, routine_name, routine_type, ddl_body)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.catalogId}, #{r.schemaName}, #{r.routineName}, #{r.routineType}, #{r.ddlBody})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByCatalogId" parameterType="long">
+        DELETE FROM CATALOG_ROUTINE WHERE catalog_id = #{catalogId}
+    </delete>
+
+</mapper>

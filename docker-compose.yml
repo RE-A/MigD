@@ -1,0 +1,29 @@
+services:
+  migd-source:
+    image: postgres:14
+    container_name: migd-source
+    environment:
+      POSTGRES_DB: sourcedb
+      POSTGRES_USER: migd
+      POSTGRES_PASSWORD: migd1234
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./src/test/resources/db/init-source.sql:/docker-entrypoint-initdb.d/init.sql
+      - migd-source-data:/var/lib/postgresql/data
+
+  migd-target:
+    image: postgres:14
+    container_name: migd-target
+    environment:
+      POSTGRES_DB: targetdb
+      POSTGRES_USER: migd
+      POSTGRES_PASSWORD: migd1234
+    ports:
+      - "5434:5432"
+    volumes:
+      - migd-target-data:/var/lib/postgresql/data
+
+volumes:
+  migd-source-data:
+  migd-target-data:

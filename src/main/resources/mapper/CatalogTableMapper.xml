@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.migd.mapper.CatalogTableMapper">
+
+    <resultMap id="rm" type="CatalogTable">
+        <id     property="id"           column="id"/>
+        <result property="catalogId"    column="catalog_id"/>
+        <result property="schemaName"   column="schema_name"/>
+        <result property="tableName"    column="table_name"/>
+        <result property="tableComment" column="table_comment"/>
+    </resultMap>
+
+    <select id="findByCatalogId" parameterType="long" resultMap="rm">
+        SELECT * FROM CATALOG_TABLE
+        WHERE catalog_id = #{catalogId}
+        ORDER BY table_name
+    </select>
+
+    <select id="findById" parameterType="long" resultMap="rm">
+        SELECT * FROM CATALOG_TABLE WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="CatalogTable" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO CATALOG_TABLE (catalog_id, schema_name, table_name, table_comment)
+        VALUES (#{catalogId}, #{schemaName}, #{tableName}, #{tableComment})
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO CATALOG_TABLE (catalog_id, schema_name, table_name, table_comment)
+        VALUES
+        <foreach collection="list" item="t" separator=",">
+            (#{t.catalogId}, #{t.schemaName}, #{t.tableName}, #{t.tableComment})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByCatalogId" parameterType="long">
+        DELETE FROM CATALOG_TABLE WHERE catalog_id = #{catalogId}
+    </delete>
+
+</mapper>

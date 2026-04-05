@@ -257,6 +257,168 @@ CREATE INDEX idx_salary_history_emp  ON hr.salary_history(emp_id);
 CREATE INDEX idx_audit_logs_table    ON hr.audit_logs(table_name);
 CREATE INDEX idx_audit_logs_time     ON hr.audit_logs(changed_at);
 
+-- ── 테이블·컬럼 한글 코멘트 ──────────────────────────────────
+
+COMMENT ON TABLE hr.departments IS '부서';
+COMMENT ON COLUMN hr.departments.dept_id    IS '부서 ID';
+COMMENT ON COLUMN hr.departments.name       IS '부서명';
+COMMENT ON COLUMN hr.departments.location   IS '소재지';
+COMMENT ON COLUMN hr.departments.budget     IS '연간 예산';
+COMMENT ON COLUMN hr.departments.created_at IS '생성일시';
+
+COMMENT ON TABLE hr.job_titles IS '직무';
+COMMENT ON COLUMN hr.job_titles.job_id     IS '직무 ID';
+COMMENT ON COLUMN hr.job_titles.title      IS '직무명';
+COMMENT ON COLUMN hr.job_titles.grade      IS '직급 (1~10)';
+COMMENT ON COLUMN hr.job_titles.min_salary IS '최저 급여';
+COMMENT ON COLUMN hr.job_titles.max_salary IS '최고 급여';
+
+COMMENT ON TABLE hr.employees IS '직원';
+COMMENT ON COLUMN hr.employees.emp_id     IS '직원 ID';
+COMMENT ON COLUMN hr.employees.dept_id    IS '소속 부서 ID';
+COMMENT ON COLUMN hr.employees.job_id     IS '직무 ID';
+COMMENT ON COLUMN hr.employees.first_name IS '이름';
+COMMENT ON COLUMN hr.employees.last_name  IS '성';
+COMMENT ON COLUMN hr.employees.email      IS '이메일';
+COMMENT ON COLUMN hr.employees.hire_date  IS '입사일';
+COMMENT ON COLUMN hr.employees.salary     IS '월 급여';
+COMMENT ON COLUMN hr.employees.is_active  IS '재직 여부';
+
+COMMENT ON TABLE hr.salary_history IS '급여 변경 이력';
+COMMENT ON COLUMN hr.salary_history.history_id  IS '이력 ID';
+COMMENT ON COLUMN hr.salary_history.emp_id      IS '직원 ID';
+COMMENT ON COLUMN hr.salary_history.old_salary  IS '변경 전 급여';
+COMMENT ON COLUMN hr.salary_history.new_salary  IS '변경 후 급여';
+COMMENT ON COLUMN hr.salary_history.changed_at  IS '변경일시';
+COMMENT ON COLUMN hr.salary_history.changed_by  IS '변경자';
+
+COMMENT ON TABLE hr.projects IS '프로젝트';
+COMMENT ON COLUMN hr.projects.project_id IS '프로젝트 ID';
+COMMENT ON COLUMN hr.projects.name       IS '프로젝트명';
+COMMENT ON COLUMN hr.projects.dept_id   IS '담당 부서 ID';
+COMMENT ON COLUMN hr.projects.status    IS '상태 (ACTIVE/CLOSED/ON_HOLD)';
+COMMENT ON COLUMN hr.projects.start_date IS '시작일';
+COMMENT ON COLUMN hr.projects.end_date   IS '종료일';
+COMMENT ON COLUMN hr.projects.budget     IS '예산';
+
+COMMENT ON TABLE hr.project_assignments IS '프로젝트 투입 인원';
+COMMENT ON COLUMN hr.project_assignments.assign_id   IS '투입 ID';
+COMMENT ON COLUMN hr.project_assignments.project_id  IS '프로젝트 ID';
+COMMENT ON COLUMN hr.project_assignments.emp_id      IS '직원 ID';
+COMMENT ON COLUMN hr.project_assignments.role        IS '역할';
+COMMENT ON COLUMN hr.project_assignments.assigned_at IS '투입일시';
+
+COMMENT ON TABLE hr.leave_requests IS '휴가 신청';
+COMMENT ON COLUMN hr.leave_requests.leave_id    IS '휴가 신청 ID';
+COMMENT ON COLUMN hr.leave_requests.emp_id      IS '직원 ID';
+COMMENT ON COLUMN hr.leave_requests.type        IS '휴가 종류 (ANNUAL/SICK/MATERNITY/UNPAID)';
+COMMENT ON COLUMN hr.leave_requests.start_date  IS '휴가 시작일';
+COMMENT ON COLUMN hr.leave_requests.end_date    IS '휴가 종료일';
+COMMENT ON COLUMN hr.leave_requests.status      IS '승인 상태 (PENDING/APPROVED/REJECTED)';
+COMMENT ON COLUMN hr.leave_requests.approved_by IS '승인자 ID';
+
+COMMENT ON TABLE hr.attendance IS '근태 기록';
+COMMENT ON COLUMN hr.attendance.attend_id IS '근태 ID';
+COMMENT ON COLUMN hr.attendance.emp_id    IS '직원 ID';
+COMMENT ON COLUMN hr.attendance.work_date IS '근무일';
+COMMENT ON COLUMN hr.attendance.check_in  IS '출근 시각';
+COMMENT ON COLUMN hr.attendance.check_out IS '퇴근 시각';
+COMMENT ON COLUMN hr.attendance.status    IS '근태 상태 (PRESENT/ABSENT/LATE/HALF)';
+
+COMMENT ON TABLE hr.performance_reviews IS '인사 평가';
+COMMENT ON COLUMN hr.performance_reviews.review_id   IS '평가 ID';
+COMMENT ON COLUMN hr.performance_reviews.emp_id      IS '피평가자 ID';
+COMMENT ON COLUMN hr.performance_reviews.reviewer_id IS '평가자 ID';
+COMMENT ON COLUMN hr.performance_reviews.period      IS '평가 기간 (예: 2024-H1)';
+COMMENT ON COLUMN hr.performance_reviews.score       IS '평가 점수 (1~5)';
+COMMENT ON COLUMN hr.performance_reviews.comment     IS '평가 의견';
+COMMENT ON COLUMN hr.performance_reviews.reviewed_at IS '평가일시';
+
+COMMENT ON TABLE hr.training_courses IS '교육 과정';
+COMMENT ON COLUMN hr.training_courses.course_id      IS '과정 ID';
+COMMENT ON COLUMN hr.training_courses.title          IS '과정명';
+COMMENT ON COLUMN hr.training_courses.category       IS '분류';
+COMMENT ON COLUMN hr.training_courses.duration_hours IS '교육 시간 (시간)';
+COMMENT ON COLUMN hr.training_courses.instructor     IS '강사명';
+
+COMMENT ON TABLE hr.training_enrollments IS '교육 수강 내역';
+COMMENT ON COLUMN hr.training_enrollments.enroll_id    IS '수강 ID';
+COMMENT ON COLUMN hr.training_enrollments.course_id    IS '과정 ID';
+COMMENT ON COLUMN hr.training_enrollments.emp_id       IS '직원 ID';
+COMMENT ON COLUMN hr.training_enrollments.enrolled_at  IS '수강 신청일시';
+COMMENT ON COLUMN hr.training_enrollments.completed_at IS '수료일시';
+COMMENT ON COLUMN hr.training_enrollments.score        IS '수료 점수 (0~100)';
+
+COMMENT ON TABLE hr.benefits IS '복리후생 항목';
+COMMENT ON COLUMN hr.benefits.benefit_id     IS '복리후생 ID';
+COMMENT ON COLUMN hr.benefits.name           IS '항목명';
+COMMENT ON COLUMN hr.benefits.type           IS '유형';
+COMMENT ON COLUMN hr.benefits.description    IS '설명';
+COMMENT ON COLUMN hr.benefits.monthly_amount IS '월 지급액';
+
+COMMENT ON TABLE hr.employee_benefits IS '직원별 복리후생 적용 내역';
+COMMENT ON COLUMN hr.employee_benefits.eb_id       IS '적용 ID';
+COMMENT ON COLUMN hr.employee_benefits.emp_id      IS '직원 ID';
+COMMENT ON COLUMN hr.employee_benefits.benefit_id  IS '복리후생 ID';
+COMMENT ON COLUMN hr.employee_benefits.start_date  IS '적용 시작일';
+COMMENT ON COLUMN hr.employee_benefits.end_date    IS '적용 종료일';
+
+COMMENT ON TABLE hr.assets IS '자산';
+COMMENT ON COLUMN hr.assets.asset_id      IS '자산 ID';
+COMMENT ON COLUMN hr.assets.name          IS '자산명';
+COMMENT ON COLUMN hr.assets.category      IS '분류';
+COMMENT ON COLUMN hr.assets.serial_no     IS '시리얼 번호';
+COMMENT ON COLUMN hr.assets.purchase_date IS '구매일';
+COMMENT ON COLUMN hr.assets.value         IS '취득 원가';
+
+COMMENT ON TABLE hr.asset_assignments IS '자산 불출 내역';
+COMMENT ON COLUMN hr.asset_assignments.aa_id       IS '불출 ID';
+COMMENT ON COLUMN hr.asset_assignments.asset_id    IS '자산 ID';
+COMMENT ON COLUMN hr.asset_assignments.emp_id      IS '사용자 직원 ID';
+COMMENT ON COLUMN hr.asset_assignments.assigned_at IS '불출일시';
+COMMENT ON COLUMN hr.asset_assignments.returned_at IS '반납일시';
+
+COMMENT ON TABLE hr.announcements IS '공지사항';
+COMMENT ON COLUMN hr.announcements.ann_id       IS '공지 ID';
+COMMENT ON COLUMN hr.announcements.title        IS '제목';
+COMMENT ON COLUMN hr.announcements.content      IS '내용';
+COMMENT ON COLUMN hr.announcements.author_id    IS '작성자 직원 ID';
+COMMENT ON COLUMN hr.announcements.published_at IS '게시일시';
+COMMENT ON COLUMN hr.announcements.is_pinned    IS '상단 고정 여부';
+
+COMMENT ON TABLE hr.documents IS '문서';
+COMMENT ON COLUMN hr.documents.doc_id     IS '문서 ID';
+COMMENT ON COLUMN hr.documents.title      IS '문서 제목';
+COMMENT ON COLUMN hr.documents.category   IS '분류';
+COMMENT ON COLUMN hr.documents.file_path  IS '파일 경로';
+COMMENT ON COLUMN hr.documents.owner_id   IS '소유자 직원 ID';
+COMMENT ON COLUMN hr.documents.created_at IS '등록일시';
+
+COMMENT ON TABLE hr.expense_reports IS '경비 보고서';
+COMMENT ON COLUMN hr.expense_reports.report_id    IS '보고서 ID';
+COMMENT ON COLUMN hr.expense_reports.emp_id       IS '신청자 직원 ID';
+COMMENT ON COLUMN hr.expense_reports.title        IS '보고서 제목';
+COMMENT ON COLUMN hr.expense_reports.status       IS '처리 상태 (DRAFT/SUBMITTED/APPROVED/REJECTED)';
+COMMENT ON COLUMN hr.expense_reports.submitted_at IS '제출일시';
+COMMENT ON COLUMN hr.expense_reports.approved_by  IS '승인자 ID';
+
+COMMENT ON TABLE hr.expense_items IS '경비 항목';
+COMMENT ON COLUMN hr.expense_items.item_id     IS '항목 ID';
+COMMENT ON COLUMN hr.expense_items.report_id   IS '경비 보고서 ID';
+COMMENT ON COLUMN hr.expense_items.category    IS '항목 분류';
+COMMENT ON COLUMN hr.expense_items.amount      IS '금액';
+COMMENT ON COLUMN hr.expense_items.description IS '설명';
+COMMENT ON COLUMN hr.expense_items.receipt_no  IS '영수증 번호';
+
+COMMENT ON TABLE hr.audit_logs IS '변경 감사 로그';
+COMMENT ON COLUMN hr.audit_logs.log_id     IS '로그 ID';
+COMMENT ON COLUMN hr.audit_logs.table_name IS '변경된 테이블명';
+COMMENT ON COLUMN hr.audit_logs.operation  IS '작업 종류 (INSERT/UPDATE/DELETE)';
+COMMENT ON COLUMN hr.audit_logs.row_id     IS '변경된 행 ID';
+COMMENT ON COLUMN hr.audit_logs.changed_by IS '변경자';
+COMMENT ON COLUMN hr.audit_logs.changed_at IS '변경일시';
+COMMENT ON COLUMN hr.audit_logs.detail     IS '변경 상세 내용 (JSONB)';
+
 -- ── plpgsql 함수 3개 ────────────────────────────────────────
 
 -- 함수1: 부서 재직자 수

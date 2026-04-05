@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.migd.mapper.SchemaCatalogMapper">
+
+    <resultMap id="rm" type="SchemaCatalog">
+        <id     property="id"           column="id"/>
+        <result property="schemaName"   column="schema_name"/>
+        <result property="dbHost"       column="db_host"/>
+        <result property="dbName"       column="db_name"/>
+        <result property="analyzedAt"   column="analyzed_at"/>
+        <result property="tableCount"   column="table_count"/>
+        <result property="routineCount" column="routine_count"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="rm">
+        SELECT * FROM SCHEMA_CATALOG ORDER BY analyzed_at DESC
+    </select>
+
+    <select id="findById" parameterType="long" resultMap="rm">
+        SELECT * FROM SCHEMA_CATALOG WHERE id = #{id}
+    </select>
+
+    <select id="findByKey" resultMap="rm">
+        SELECT * FROM SCHEMA_CATALOG
+        WHERE schema_name = #{schemaName}
+          AND db_host     = #{dbHost}
+          AND db_name     = #{dbName}
+    </select>
+
+    <insert id="insert" parameterType="SchemaCatalog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO SCHEMA_CATALOG (schema_name, db_host, db_name)
+        VALUES (#{schemaName}, #{dbHost}, #{dbName})
+    </insert>
+
+    <update id="updateStats">
+        UPDATE SCHEMA_CATALOG
+        SET table_count   = #{tableCount},
+            routine_count = #{routineCount},
+            analyzed_at   = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM SCHEMA_CATALOG WHERE id = #{id}
+    </delete>
+
+</mapper>

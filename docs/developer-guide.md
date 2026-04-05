@@ -9,11 +9,13 @@
 5. [핵심 설계 원칙](#5-핵심-설계-원칙)
 6. [환경 설정](#6-환경-설정)
 7. [빌드 및 실행](#7-빌드-및-실행)
-8. [테스트](#8-테스트)
-9. [API 엔드포인트](#9-api-엔드포인트)
-10. [이관 흐름 상세](#10-이관-흐름-상세)
-11. [오류 처리](#11-오류-처리)
-12. [로그](#12-로그)
+8. [로컬 개발 DB (Docker Compose)](#8-로컬-개발-db-docker-compose)
+9. [스키마 카탈로그](#9-스키마-카탈로그)
+10. [테스트](#10-테스트)
+11. [API 엔드포인트](#11-api-엔드포인트)
+12. [이관 흐름 상세](#12-이관-흐름-상세)
+13. [오류 처리](#13-오류-처리)
+14. [로그](#14-로그)
 
 ---
 
@@ -28,6 +30,7 @@ MigD는 PostgreSQL 데이터베이스 간 **부분 데이터 이관** 도구다.
 - WHERE 조건 부분 이관
 - pg_dump 기반 스키마 이관
 - 프리셋(테이블 목록) 저장/불러오기
+- **스키마 카탈로그**: 소스 DB의 테이블·컬럼·프로시저 구조를 H2에 스냅샷으로 저장하고 빠르게 검색
 - AWS 도메인 대상 호스트 차단
 
 ---
@@ -41,7 +44,7 @@ MigD는 PostgreSQL 데이터베이스 간 **부분 데이터 이관** 도구다.
 | Build | Gradle | 8.x |
 | Web/View | Spring MVC + Thymeleaf | SSR |
 | CSS Framework | Bootstrap | 5.3.3 |
-| 프리셋 저장소 | H2 File Mode + MyBatis | - |
+| 프리셋/카탈로그 저장소 | H2 File Mode + MyBatis | - |
 | 이관 실행 | 순수 JDBC + PostgreSQL JDBC Driver | 42.x |
 | SQL 파싱 | JSqlParser | 4.9 |
 | 테스트 | JUnit 5 + Testcontainers | - |
@@ -61,6 +64,11 @@ Controller (Spring MVC)
     ├── PresetService ──── H2 File DB (MyBatis)
     │                       └── PRESET / PRESET_TABLE
     │
+    ├── CatalogService ─── H2 File DB (MyBatis)
+    │                       └── SCHEMA_CATALOG / CATALOG_TABLE
+    │                           CATALOG_COLUMN / CATALOG_ROUTINE
+    │                       └── Source DB (분석 시에만 — JdbcConnectionUtil)
+    │
     ├── SchemaService ──── pg_dump (ProcessBuilder, 로컬 바이너리)
     │                       └── Source DB → DDL 추출 → Target DB 적용
     │
@@ -75,8 +83,8 @@ MigD는 두 종류의 DB 연결을 완전히 분리한다:
 
 | 연결 유형 | 사용 목적 | 생성 방식 |
 |----------|---------|---------|
-| **H2** | 프리셋 CRUD, MyBatis | Spring의 DataSource (커넥션 풀) |
-| **소스 DB** | COPY OUT, DDL 추출 | `JdbcConnectionUtil.open(DbConnInfo)` — 런타임 동적 생성 |
+| **H2** | 프리셋 CRUD, 카탈로그 저장/검색, MyBatis | Spring의 DataSource (커넥션 풀) |
+| **소스 DB** | COPY OUT, DDL 추출, **카탈로그 분석** | `JdbcConnectionUtil.open(DbConnInfo)` — 런타임 동적 생성 |
 | **대상 DB** | COPY IN, DDL 적용 | `JdbcConnectionUtil.open(DbConnInfo)` — 런타임 동적 생성 |
 
 소스 DB 접속 정보는 `application.yml`의 `migd.source-db.*`에서만 읽으며, 사용자가 화면에서 변경할 수 없다. 대상 DB 접속 정보는 이관 실행 화면에서 매번 입력받는다.
@@ -141,16 +149,22 @@ src/main/java/com/migd/
 │   ├── HomeController.java           GET /
 │   ├── MigrationController.java      GET/POST /migration
 │   ├── SchemaController.java         GET/POST /schema
-│   └── PresetController.java         /presets CRUD + AJAX
+│   ├── PresetController.java         /presets CRUD + AJAX
+│   └── CatalogController.java        /catalog — 카탈로그 목록/분석/검색/루틴 조회
 │
 ├── service/
 │   ├── DataMigrationService.java     COPY BINARY 이관 실행
 │   ├── SchemaService.java            pg_dump 스키마 이관
-│   └── PresetService.java            프리셋 CRUD (H2+MyBatis)
+│   ├── PresetService.java            프리셋 CRUD (H2+MyBatis)
+│   └── CatalogService.java           스키마 분석, 카탈로그 검색, 루틴 참조 분석
 │
 ├── domain/
-│   ├── Preset.java                   프리셋 마스터 (id, name, description)
-│   └── PresetTable.java              테이블 목록 (schema, table, where, orderNum)
+│   ├── Preset.java                   프리셋 마스터
+│   ├── PresetTable.java              테이블 목록
+│   ├── SchemaCatalog.java            카탈로그 루트 (스키마 단위)
+│   ├── CatalogTable.java             테이블 목록 + tableComment
+│   ├── CatalogColumn.java            컬럼 목록 (columnNameLower 포함)
+│   └── CatalogRoutine.java           프로시저/함수 DDL 전문
 │
 ├── dto/
 │   ├── DbConnInfo.java               record — DB 접속 정보
@@ -159,36 +173,51 @@ src/main/java/com/migd/
 │   ├── TableMigrationResult.java     테이블 단위 결과 (record)
 │   ├── SchemaExecuteRequest.java     스키마 이관 폼
 │   ├── SchemaResult.java             테이블 스키마 결과 (record, Status enum)
-│   └── FullSchemaDumpResult.java     전체 스키마 덤프 결과 (record)
+│   ├── FullSchemaDumpResult.java     전체 스키마 덤프 결과 (record)
+│   ├── ColumnSearchResult.java       컬럼 검색 결과 (catalogId, tableId 포함)
+│   └── RoutineSearchResult.java      루틴 검색 결과 + MatchedLine (컨텍스트, 주석여부)
 │
 ├── exception/
 │   ├── MigrationException.java       RuntimeException 래퍼
 │   └── PkDuplicateException.java     PK 중복 전용 (미사용, SQLState 23505로 직접 처리)
 │
 ├── mapper/
-│   ├── PresetMapper.java             MyBatis 인터페이스
-│   └── PresetTableMapper.java        MyBatis 인터페이스
+│   ├── PresetMapper.java
+│   ├── PresetTableMapper.java
+│   ├── SchemaCatalogMapper.java      카탈로그 루트 CRUD
+│   ├── CatalogTableMapper.java       테이블 목록 CRUD
+│   ├── CatalogColumnMapper.java      컬럼 검색 (LIKE + column_comment)
+│   └── CatalogRoutineMapper.java     루틴 CRUD + DDL 본문 검색 (INSTR)
 │
 └── util/
-    └── JdbcConnectionUtil.java       JDBC URL 생성 + Connection 오픈
+    ├── JdbcConnectionUtil.java       JDBC URL 생성 + Connection 오픈
+    ├── CommentRangeDetector.java     DDL 주석 라인 범위 판별 (상태 머신)
+    └── RoutineRefExtractor.java      DDL에서 참조 테이블·루틴 정규식 추출
 
 src/main/resources/
 ├── application.yml
-├── schema.sql                        H2 초기화 DDL (PRESET, PRESET_TABLE)
+├── schema.sql                        H2 초기화 DDL
+│                                     PRESET, PRESET_TABLE (재기동 시 DROP+CREATE)
+│                                     SCHEMA_CATALOG, CATALOG_TABLE, CATALOG_COLUMN,
+│                                     CATALOG_ROUTINE (IF NOT EXISTS — 재기동 시 유지)
 ├── mapper/
 │   ├── PresetMapper.xml
-│   └── PresetTableMapper.xml
+│   ├── PresetTableMapper.xml
+│   ├── SchemaCatalogMapper.xml
+│   ├── CatalogTableMapper.xml
+│   ├── CatalogColumnMapper.xml
+│   └── CatalogRoutineMapper.xml
 └── templates/
-    ├── fragments/layout.html         공통 레이아웃 (navbar, Bootstrap)
-    ├── index.html                    대시보드
+    ├── fragments/layout.html
+    ├── index.html
     ├── migration/
-    │   ├── execute.html              이관 실행 화면
-    │   └── result.html              이관 결과 화면
     ├── preset/
-    │   ├── list.html                 프리셋 목록
-    │   └── form.html                 프리셋 생성/수정
-    └── schema/
-        └── execute.html             스키마 이관 화면
+    ├── schema/
+    └── catalog/
+        ├── index.html                카탈로그 목록 + 검색 폼 + 스키마 분석
+        ├── search.html               통합 검색 결과 (컬럼/루틴, 키워드 강조)
+        ├── tables.html               테이블 목록 사이드바 + 컬럼 상세
+        └── routines.html             루틴 목록 사이드바 + DDL + 참조 분석
 ```
 
 ---
@@ -369,20 +398,139 @@ server:
 
 ---
 
-## 8. 테스트
+## 8. 로컬 개발 DB (Docker Compose)
 
-### 8.1 테스트 구성
+개발/테스트용 소스·타겟 PostgreSQL 14 서버를 로컬에 띄우는 방법이다. 프로젝트 루트의 `docker-compose.yml`을 사용한다.
+
+### 8.1 기동 / 종료
+
+```bash
+# 기동 (백그라운드)
+podman-compose up -d
+# 또는
+docker compose up -d
+
+# 종료 (데이터 볼륨 유지)
+podman-compose down
+
+# 종료 + 데이터 완전 삭제 (init-source.sql 재실행 필요 시)
+podman-compose down -v
+```
+
+### 8.2 접속 정보
+
+| | 소스 DB (`migd-source`) | 타겟 DB (`migd-target`) |
+|---|---|---|
+| 호스트 | `localhost` | `localhost` |
+| 포트 | `5433` | `5434` |
+| DB명 | `sourcedb` | `targetdb` |
+| 유저 | `migd` | `migd` |
+| 비밀번호 | `migd1234` | `migd1234` |
+
+소스 DB는 최초 기동 시 `src/test/resources/db/init-source.sql`이 자동 실행되어 HR 스키마 20개 테이블과 219건의 샘플 데이터, 그리고 각 테이블·컬럼의 한글 코멘트가 적재된 상태로 뜬다. 타겟 DB는 빈 상태로 뜬다.
+
+> **카탈로그 한글명 적용**: `init-source.sql`의 `COMMENT ON TABLE/COLUMN` 구문은 최초 기동 시에만 실행된다. 컨테이너가 이미 존재한다면 `podman-compose down -v && podman-compose up -d` 후 카탈로그 재분석이 필요하다.
+
+### 8.3 application.yml 소스 DB 설정 (로컬 개발 시)
+
+```yaml
+migd:
+  source-db:
+    host: localhost
+    port: 5433
+    db: sourcedb
+    user: migd
+    password: migd1234
+```
+
+---
+
+## 9. 스키마 카탈로그
+
+소스 DB의 스키마 구조(테이블·컬럼·프로시저)를 H2에 스냅샷으로 저장하고, 빠르게 검색·탐색할 수 있는 기능이다.
+
+### 9.1 H2 테이블 구조
+
+```
+SCHEMA_CATALOG   — 카탈로그 루트 (schema_name + db_host + db_name UNIQUE)
+CATALOG_TABLE    — 테이블 목록 (table_comment 포함)
+CATALOG_COLUMN   — 컬럼 목록 (column_name_lower 검색 최적화 컬럼)
+CATALOG_ROUTINE  — 프로시저/함수 DDL 전문 (CLOB)
+```
+
+FK 제약 없음. CASCADE DELETE는 `CatalogService`에서 순서를 보장하여 수동 처리한다.
+
+카탈로그 테이블은 `IF NOT EXISTS`로 생성되므로 **서버 재기동 시 데이터가 유지**된다.
+
+### 9.2 소스 DB 분석 쿼리
+
+| 대상 | 쿼리 |
+|------|------|
+| 테이블 목록 + 한글명 | `pg_class + obj_description(oid, 'pg_class')` |
+| PK 컬럼 | `information_schema.table_constraints + key_column_usage` |
+| 컬럼 목록 + 한글명 | `information_schema.columns + col_description(c.oid, a.attnum)` |
+| 프로시저/함수 DDL | `pg_proc + pg_get_functiondef(p.oid) WHERE prokind IN ('f','p')` |
+
+### 9.3 컬럼 검색 성능
+
+`CATALOG_COLUMN.column_name_lower` 컬럼에 소문자 정규화된 값을 저장하고, `(catalog_id, column_name_lower)` 복합 인덱스를 사용한다.
+
+```sql
+WHERE (column_name_lower LIKE CONCAT('%', LOWER(?), '%')
+    OR LOWER(column_comment) LIKE CONCAT('%', LOWER(?), '%'))
+  AND catalog_id = ?   -- 스키마 선택 시
+```
+
+### 9.4 프로시저 본문 검색
+
+H2 `INSTR(LOWER(ddl_body), LOWER(?)) > 0` 방식으로 CLOB 전문 검색. FTS(Lucene) 미사용 — SQL 변수명/특수문자(`_`, `.`, `(`) 토크나이저 오매칭 방지.
+
+검색 결과에서 매칭 라인의 앞뒤 1줄씩 컨텍스트로 표시하며, `CommentRangeDetector`(상태 머신)로 주석 내 일치 여부를 판별해 `[주석 내]`/`[코드]` 배지를 표시한다.
+
+### 9.5 루틴 참조 분석
+
+`/catalog/{id}/routines/{rid}` 화면에서 선택된 루틴의 DDL을 `RoutineRefExtractor`로 파싱한다.
+
+```
+전략: 정규식으로 후보 식별자 추출 → 카탈로그 내 실존 테이블/루틴과 교차(intersection)
+- 테이블 참조: FROM / JOIN / UPDATE / INSERT INTO 키워드 뒤 식별자
+- 루틴 참조:  식별자() 패턴 (자기 자신 제외)
+- schema.name 형식의 한정자는 name 부분만 비교
+```
+
+결과는 클릭 가능한 배지로 표시되며, 각 배지 클릭 시 해당 테이블 정의 또는 루틴 소스코드로 이동한다.
+
+### 9.6 카탈로그 URL 구조
+
+| Method | URL | 설명 |
+|--------|-----|------|
+| GET | `/catalog` | 카탈로그 목록 + 검색 폼 + 분석 폼 |
+| POST | `/catalog/analyze` | 스키마 분석 실행 |
+| POST | `/catalog/{id}/delete` | 카탈로그 삭제 |
+| GET | `/catalog/search` | 통합 검색 (`?keyword=&catalogId=&type=`) |
+| GET | `/catalog/{id}/tables` | 테이블 목록 |
+| GET | `/catalog/{id}/tables/{tid}` | 테이블 컬럼 상세 |
+| GET | `/catalog/{id}/routines` | 루틴 목록 |
+| GET | `/catalog/{id}/routines/{rid}` | 루틴 DDL + 참조 분석 |
+
+---
+
+## 10. 테스트
+
+### 10.1 테스트 구성
 
 | 클래스 | 종류 | 목적 |
 |--------|------|------|
 | `DataMigrationServiceQueryTest` | 단위 | `buildCopyOutQuery` / `buildCopyInQuery` SQL 조립 검증 (리플렉션으로 private 메서드 접근) |
+| `MigrationRequestTest` | 단위 | DTO 필드 매핑, 방어적 복사 |
+| `RoutineRefExtractorTest` | 단위 | DDL 참조 테이블·루틴 추출, known 목록 교차, null 처리 |
 | `PresetServiceTest` | 통합 (H2) | WHERE 조건 저장/로드, ORDER 정렬, 테이블 교체, CASCADE 삭제 |
 | `MigrationControllerTest` | 통합 (MockMvc) | AWS 호스트 차단, GET 화면 렌더링 |
 | `SchemaControllerTest` | 통합 (MockMvc) | AWS 호스트 차단 |
-| `MigrationRequestTest` | 단위 | DTO 필드 매핑, 방어적 복사 |
+| `CatalogControllerTest` | 통합 (MockMvc) | 카탈로그 페이지 렌더링, 검색 모드별 모델 속성, 유효하지 않은 catalogId 리다이렉트 |
 | `PostgresMigrationIntegrationTest` | Docker 통합 | 실제 PostgreSQL 두 대로 end-to-end 이관 흐름 검증 |
 
-### 8.2 단위/통합 테스트 실행
+### 10.2 단위/통합 테스트 실행
 
 ```bash
 ./gradlew test
@@ -390,7 +538,7 @@ server:
 
 테스트 리포트: `build/reports/tests/test/index.html`
 
-### 8.3 Docker 통합 테스트
+### 10.3 Docker 통합 테스트
 
 `PostgresMigrationIntegrationTest`는 Docker를 사용해 PostgreSQL 14 컨테이너 2개(소스/타겟)를 자동으로 기동한다. Docker가 설치되어 있어야 실행된다.
 
@@ -413,21 +561,21 @@ server:
 ./gradlew test --tests "com.migd.integration.*"
 ```
 
-### 8.4 테스트 설정 파일
+### 10.4 테스트 설정 파일
 
 ```
 src/test/resources/
 ├── application.yml              H2 인메모리 오버라이드, migd.source-db dummy값
 └── db/
-    ├── init-source.sql          소스 컨테이너 초기화 DDL+DML (HR 스키마)
+    ├── init-source.sql          소스 컨테이너 초기화 DDL+DML (HR 스키마 + 한글 코멘트)
     └── create-target-schema.sql 타겟 스키마 생성 (IF NOT EXISTS, FK 없음)
 ```
 
 ---
 
-## 9. API 엔드포인트
+## 11. API 엔드포인트
 
-### 9.1 화면 (Thymeleaf SSR)
+### 11.1 화면 (Thymeleaf SSR)
 
 | Method | URL | 역할 |
 |--------|-----|------|
@@ -442,8 +590,16 @@ src/test/resources/
 | GET | `/presets/{id}/edit` | 프리셋 수정 폼 |
 | POST | `/presets` | 프리셋 저장 (폼 제출) |
 | POST | `/presets/{id}/delete` | 프리셋 삭제 |
+| GET | `/catalog` | 카탈로그 목록 |
+| POST | `/catalog/analyze` | 스키마 분석 실행 |
+| POST | `/catalog/{id}/delete` | 카탈로그 삭제 |
+| GET | `/catalog/search` | 통합 검색 |
+| GET | `/catalog/{id}/tables` | 테이블 목록 |
+| GET | `/catalog/{id}/tables/{tid}` | 테이블 컬럼 상세 |
+| GET | `/catalog/{id}/routines` | 루틴 목록 |
+| GET | `/catalog/{id}/routines/{rid}` | 루틴 DDL + 참조 분석 |
 
-### 9.2 AJAX (JSON)
+### 11.2 AJAX (JSON)
 
 | Method | URL | 역할 | 요청/응답 |
 |--------|-----|------|---------|
@@ -451,7 +607,7 @@ src/test/resources/
 | POST | `/presets/save` | 프리셋 AJAX 저장 | `← Preset JSON` / `→ {id, name}` |
 | POST | `/presets/test-connection` | 대상 DB 연결 테스트 | `← host/port/db/user/password` / `→ {status, version}` |
 
-### 9.3 MigrationRequest 구조
+### 11.3 MigrationRequest 구조
 
 `POST /migration/run`의 폼 파라미터:
 
@@ -470,9 +626,9 @@ tables[1]...
 
 ---
 
-## 10. 이관 흐름 상세
+## 12. 이관 흐름 상세
 
-### 10.1 이관 실행 단계
+### 12.1 이관 실행 단계
 
 `POST /migration/run` 처리 순서:
 
@@ -483,7 +639,7 @@ tables[1]...
 5. `DataMigrationService.migrateAll()` — 순서대로 테이블 이관
 6. Flash attribute로 결과 전달 → `redirect:/migration/result`
 
-### 10.2 COPY BINARY 프로토콜 선택 이유
+### 12.2 COPY BINARY 프로토콜 선택 이유
 
 | 방식 | 장점 | 단점 |
 |------|------|------|
@@ -493,7 +649,7 @@ tables[1]...
 
 타입 변환 없이 PostgreSQL 내부 바이너리 포맷으로 전달하므로, `TIMESTAMPTZ`, `NUMERIC`, `JSONB` 등 복잡한 타입도 손실 없이 이관된다.
 
-### 10.3 WHERE 조건 처리
+### 12.3 WHERE 조건 처리
 
 ```java
 // whereCondition == null 또는 blank
@@ -510,7 +666,7 @@ WHERE 조건 문자열은 사용자가 직접 입력한 SQL 조각이므로, 신
 
 ---
 
-## 11. 오류 처리
+## 13. 오류 처리
 
 | 상황 | 처리 방식 |
 |------|---------|
@@ -521,10 +677,11 @@ WHERE 조건 문자열은 사용자가 직접 입력한 SQL 조각이므로, 신
 | PK 중복 (SQLState 23505) | 롤백 + "PK 중복 오류 [schema.table]" 메시지 |
 | 한 테이블 실패 | 이후 테이블 전부 "이전 테이블 실패로 건너뜀" |
 | AWS 도메인 | `IllegalArgumentException` → 화면으로 오류 메시지 표시 |
+| 카탈로그 분석 실패 | `RuntimeException` → Flash attribute로 오류 메시지 표시 |
 
 ---
 
-## 12. 로그
+## 14. 로그
 
 로그 파일 위치: `logs/migd.log`
 
@@ -538,6 +695,7 @@ WHERE 조건 문자열은 사용자가 직접 입력한 SQL 조각이므로, 신
 - 이관 결과: `이관 완료: schema.table - N건`
 - 롤백: `롤백 완료: schema.table`
 - pg_dump 명령: DEBUG 레벨 (`pg_dump 명령: ...`)
+- 카탈로그 분석: `스키마 분석 시작: schema=... | 테이블 N개 발견 | 루틴 N개 발견`
 - AWS 차단: WARN 레벨 없음, 예외로 직접 처리됨
 
 일별 롤링 (`logs/migd.2026-01-01.0.log`), 파일당 10MB, 30일 보관, 총 500MB 상한.
