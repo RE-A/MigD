@@ -71,9 +71,13 @@ public class MigrationController {
             attrs.addFlashAttribute("tgtDb", request.getTgtDb());
             return "redirect:/migration/result";
 
+        } catch (IllegalArgumentException e) {
+            log.warn("이관 요청 검증 오류: {}", e.getMessage());
+            attrs.addFlashAttribute("error", e.getMessage());
+            return "redirect:/migration";
         } catch (Exception e) {
             log.error("이관 요청 처리 오류", e);
-            attrs.addFlashAttribute("error", e.getMessage());
+            attrs.addFlashAttribute("error", "이관 처리 중 오류가 발생했습니다. 로그를 확인하세요.");
             return "redirect:/migration";
         }
     }

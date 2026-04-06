@@ -154,7 +154,22 @@ public class DataMigrationService {
         if (whereCondition == null || whereCondition.isBlank()) {
             return "SELECT * FROM " + qualified;
         }
+        validateWhereCondition(whereCondition);
         return "SELECT * FROM " + qualified + " WHERE " + whereCondition;
+    }
+
+    private static void validateWhereCondition(String where) {
+        if (where.contains(";")) {
+            throw new IllegalArgumentException("WHERE 조건에 세미콜론(;)은 허용되지 않습니다.");
+        }
+        String upper = where.stripLeading().toUpperCase();
+        // 문장 시작에 오는 DDL/DML 키워드 차단
+        for (String kw : List.of("DROP ", "TRUNCATE ", "DELETE ", "INSERT ", "UPDATE ",
+                "ALTER ", "CREATE ", "EXEC ", "EXECUTE ", "CALL ")) {
+            if (upper.startsWith(kw)) {
+                throw new IllegalArgumentException("WHERE 조건에 허용되지 않는 구문이 포함되어 있습니다: " + kw.trim());
+            }
+        }
     }
 
     private String buildCopyInQuery(String schemaName, String tableName) {

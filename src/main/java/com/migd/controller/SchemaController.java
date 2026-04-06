@@ -51,9 +51,12 @@ public class SchemaController {
             attrs.addFlashAttribute("tgtHost", request.getTgtHost());
             attrs.addFlashAttribute("tgtDb", request.getTgtDb());
 
+        } catch (IllegalArgumentException e) {
+            log.warn("스키마 이관 검증 오류: {}", e.getMessage());
+            attrs.addFlashAttribute("error", e.getMessage());
         } catch (Exception e) {
             log.error("스키마 이관 오류", e);
-            attrs.addFlashAttribute("error", e.getMessage());
+            attrs.addFlashAttribute("error", "스키마 이관 처리 중 오류가 발생했습니다. 로그를 확인하세요.");
         }
         return "redirect:/schema";
     }

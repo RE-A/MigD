@@ -188,18 +188,22 @@ public class SchemaService {
             }
         });
 
-        int exitCode = process.waitFor();
-        stdoutReader.join();
-        stderrReader.join();
+        try {
+            int exitCode = process.waitFor();
+            stdoutReader.join();
+            stderrReader.join();
 
-        if (exitCode != 0) {
-            throw new RuntimeException("pg_dump 실패 (exit " + exitCode + "): " + stderr);
-        }
-        if (!stderr.isEmpty()) {
-            log.warn("pg_dump stderr: {}", stderr);
-        }
+            if (exitCode != 0) {
+                throw new RuntimeException("pg_dump 실패 (exit " + exitCode + "): " + stderr);
+            }
+            if (!stderr.isEmpty()) {
+                log.warn("pg_dump stderr: {}", stderr);
+            }
 
-        return stdout.toString();
+            return stdout.toString();
+        } finally {
+            process.destroy();
+        }
     }
 
     /**
@@ -244,7 +248,7 @@ public class SchemaService {
                 if (c == '$') {
                     // $tag$ 패턴 탐색
                     int end = sql.indexOf('$', i + 1);
-                    if (end > i) {
+                    if (end != -1) {
                         dollarTag = sql.substring(i, end + 1);
                         current.append(dollarTag);
                         i = end + 1;
