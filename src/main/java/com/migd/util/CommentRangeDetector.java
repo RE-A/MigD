@@ -33,8 +33,8 @@ public final class CommentRangeDetector {
             // 블록 주석 내부에서 라인이 시작된 경우 → 주석 라인
             if (inBlockComment) {
                 result.add(lineNum);
-            } else if (trimmed.startsWith("--")) {
-                // 한줄 주석으로만 구성된 라인
+            } else if (trimmed.startsWith("--") || trimmed.startsWith("/*")) {
+                // 한줄 주석 또는 블록 주석으로 시작하는 라인
                 result.add(lineNum);
             }
 
@@ -54,8 +54,8 @@ public final class CommentRangeDetector {
                 } else {
                     if (c == '/' && i + 1 < line.length() && line.charAt(i + 1) == '*') {
                         inBlockComment = true;
-                        // 블록 주석 시작 — 이 라인도 주석으로 표시
-                        result.add(lineNum);
+                        // 라인 중간에서 블록 주석 시작 — 라인 전체를 주석으로 표시하지 않음
+                        // (trimmed.startsWith("/*") 조건에서만 주석 라인으로 표시)
                         i += 2;
                         continue;
                     } else if (c == '-' && i + 1 < line.length() && line.charAt(i + 1) == '-') {

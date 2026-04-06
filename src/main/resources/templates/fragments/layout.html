@@ -13,29 +13,43 @@
     </style>
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-dark bg-dark mb-4">
-    <div class="container">
-        <a class="navbar-brand" href="/presets">⚡ MigD</a>
-        <div>
-            <a class="btn btn-sm btn-outline-light" href="/presets">프리셋 목록</a>
-        </div>
+
+<!-- ── 공통 navbar fragment ──────────────────────────────── -->
+<nav th:fragment="navbar" class="navbar navbar-expand navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+                <a class="nav-link" href="/migration">이관 실행</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/schema">스키마 이관</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/catalog">스키마 카탈로그</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/presets">프리셋 목록</a>
+            </li>
+        </ul>
     </div>
 </nav>
-<div class="container pb-5">
 
-    <!-- 플래시 메시지 -->
-    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
-        <span th:text="${success}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<!-- ── 기존 layout fragment (preset 페이지용) ─────────────── -->
+<div th:fragment="content">
+    <div class="container pb-5">
+        <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+            <span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+            <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <th:block th:fragment="content"></th:block>
     </div>
-    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
-        <span th:text="${error}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-
-    <!-- 본문 (각 페이지에서 th:replace로 삽입) -->
-    <th:block th:fragment="content"></th:block>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

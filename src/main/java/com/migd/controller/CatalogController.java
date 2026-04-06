@@ -1,5 +1,6 @@
 package com.migd.controller;
 
+import com.migd.domain.CatalogColumn;
 import com.migd.domain.CatalogRoutine;
 import com.migd.domain.CatalogTable;
 import com.migd.domain.SchemaCatalog;
@@ -8,6 +9,7 @@ import com.migd.dto.RoutineSearchResult;
 import com.migd.service.CatalogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -46,14 +48,17 @@ public class CatalogController {
     }
 
     @PostMapping("/analyze")
-    public String analyze(@RequestParam String schemaName, RedirectAttributes attrs) {
+    public String analyze(@RequestParam String schemaName,
+                          @RequestParam(required = false) String excludePattern,
+                          RedirectAttributes attrs) {
         if (schemaName == null || schemaName.isBlank()) {
             attrs.addFlashAttribute("error", "스키마명을 입력하세요.");
             return "redirect:/catalog";
         }
         try {
-            log.info("카탈로그 분석 요청: schema={}", schemaName);
-            SchemaCatalog result = catalogService.analyze(schemaName.trim());
+            log.info("카탈로그 분석 요청: schema={}, excludePattern={}", schemaName, excludePattern);
+            SchemaCatalog result = catalogService.analyze(schemaName.trim(),
+                    excludePattern != null ? excludePattern.trim() : "");
             attrs.addFlashAttribute("success",
                     String.format("'%s' 스키마 분석 완료 — 테이블 %d개, 루틴 %d개",
                             result.getSchemaName(), result.getTableCount(), result.getRoutineCount()));
@@ -87,9 +92,18 @@ public class CatalogController {
         model.addAttribute("catalog", catalog);
         model.addAttribute("tables", tables);
         model.addAttribute("selectedTableId", tableId);
-        model.addAttribute("columns", catalogService.findColumnsByTableId(tableId));
         model.addAttribute("catalogs", catalogService.findAllCatalogs());
         return "catalog/tables";
+    }
+
+    /** 컬럼 목록 JSON API — 사이드바 AJAX용 */
+    @GetMapping("/{catalogId}/tables/{tableId}/columns")
+    @ResponseBody
+    public ResponseEntity<List<CatalogColumn>> tableColumnsApi(@PathVariable Long catalogId,
+                                                               @PathVariable Long tableId) {
+        SchemaCatalog catalog = catalogService.findCatalogById(catalogId);
+        if (catalog == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(catalogService.findColumnsByTableId(tableId));
     }
 
     @GetMapping("/{catalogId}/routines")
@@ -116,8 +130,9 @@ public class CatalogController {
         model.addAttribute("routines", routines);
         model.addAttribute("selectedRoutineId", routineId);
         model.addAttribute("selected", selected);
-        model.addAttribute("refTables",   refs.get("tables"));
-        model.addAttribute("refRoutines", refs.get("routines"));
+        model.addAttribute("refTables",       refs.get("tables"));
+        model.addAttribute("refRoutines",     refs.get("routines"));
+        model.addAttribute("crossSchemaRefs", refs.get("crossSchemaRefs"));
         model.addAttribute("catalogs", catalogService.findAllCatalogs());
         return "catalog/routines";
     }

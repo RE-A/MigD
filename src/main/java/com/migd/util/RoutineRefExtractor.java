@@ -59,6 +59,26 @@ public final class RoutineRefExtractor {
         return result;
     }
 
+    /**
+     * DDL에서 schema.tablename 형태의 참조 중 knownTableNames에 없는 것을 반환한다.
+     * 타 스키마 참조 표시용 — 원본 "schema.tablename" 형태로 반환.
+     */
+    public static Set<String> extractCrossSchemaRefs(String ddl, Set<String> knownTableNames) {
+        if (ddl == null || ddl.isBlank()) return Set.of();
+        Set<String> result = new HashSet<>();
+        Matcher m = TABLE_REF.matcher(ddl);
+        while (m.find()) {
+            String raw = m.group(1);
+            if (raw.contains(".")) {
+                String simple = unqualify(raw);
+                if (!knownTableNames.contains(simple)) {
+                    result.add(raw);
+                }
+            }
+        }
+        return result;
+    }
+
     /** "schema.name" → "name", "name" → "name" */
     private static String unqualify(String identifier) {
         int dot = identifier.lastIndexOf('.');

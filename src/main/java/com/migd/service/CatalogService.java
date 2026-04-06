@@ -26,11 +26,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -77,13 +79,15 @@ public class CatalogService {
     /**
      * 소스 DB의 특정 스키마를 분석해 H2에 저장한다.
      * 기존 카탈로그가 있으면 삭제 후 재삽입 (수동 CASCADE: FK 없음).
+     * excludePattern: 콤마 구분 glob 패턴 (tmp_*, *_bak 등). 빈 문자열이면 제외 없음.
      */
     @Transactional
-    public SchemaCatalog analyze(String schemaName) {
+    public SchemaCatalog analyze(String schemaName, String excludePattern) {
         MigdProperties.SourceDb s = migdProperties.getSourceDb();
         DbConnInfo srcConn = new DbConnInfo(s.getHost(), s.getPort(), s.getDb(), s.getUser(), s.getPassword());
 
-        log.info("스키마 분석 시작: schema={}, db={}:{}/{}", schemaName, s.getHost(), s.getPort(), s.getDb());
+        log.info("스키마 분석 시작: schema={}, db={}:{}/{}, excludePattern={}",
+                schemaName, s.getHost(), s.getPort(), s.getDb(), excludePattern);
 
         // 기존 카탈로그 수동 CASCADE 삭제
         SchemaCatalog existing = schemaCatalogMapper.findByKey(schemaName, s.getHost(), s.getDb());
@@ -102,9 +106,11 @@ public class CatalogService {
         schemaCatalogMapper.insert(catalog);
         Long catalogId = catalog.getId();
 
+        List<Pattern> excludePatterns = compileExcludePatterns(excludePattern);
+
         try (Connection conn = JdbcConnectionUtil.open(srcConn)) {
             // 테이블 분석
-            List<CatalogTable> tables = fetchTables(conn, schemaName, catalogId);
+            List<CatalogTable> tables = fetchTables(conn, schemaName, catalogId, excludePatterns);
             log.info("테이블 {}개 발견", tables.size());
             if (!tables.isEmpty()) {
                 batchInsertTables(tables);
@@ -174,9 +180,10 @@ public class CatalogService {
         Set<String> tableNames   = allTables.stream().map(CatalogTable::getTableName).collect(Collectors.toSet());
         Set<String> routineNames = allRoutines.stream().map(CatalogRoutine::getRoutineName).collect(Collectors.toSet());
 
-        Set<String> refTables   = RoutineRefExtractor.extractTableRefs(routine.getDdlBody(), tableNames);
-        Set<String> refRoutines = RoutineRefExtractor.extractRoutineRefs(
+        Set<String> refTables        = RoutineRefExtractor.extractTableRefs(routine.getDdlBody(), tableNames);
+        Set<String> refRoutines      = RoutineRefExtractor.extractRoutineRefs(
                 routine.getDdlBody(), routine.getRoutineName(), routineNames);
+        Set<String> crossSchemaRefs  = RoutineRefExtractor.extractCrossSchemaRefs(routine.getDdlBody(), tableNames);
 
         List<CatalogTable>   tblObjs = allTables.stream()
                 .filter(t -> refTables.contains(t.getTableName())).toList();
@@ -186,6 +193,7 @@ public class CatalogService {
         Map<String, Object> result = new HashMap<>();
         result.put("tables", tblObjs);
         result.put("routines", rtnObjs);
+        result.put("crossSchemaRefs", new ArrayList<>(crossSchemaRefs));
         return result;
     }
 
@@ -236,6 +244,7 @@ public class CatalogService {
 
             if (!matched.isEmpty()) {
                 results.add(new RoutineSearchResult(
+                        routine.getCatalogId(), routine.getId(),
                         routine.getSchemaName(), routine.getRoutineName(),
                         routine.getRoutineType(), matched));
             }
@@ -245,7 +254,32 @@ public class CatalogService {
 
     // ── PostgreSQL 분석 쿼리 ──────────────────────────────────────────
 
-    private List<CatalogTable> fetchTables(Connection conn, String schemaName, Long catalogId)
+    /**
+     * 콤마 구분 glob 패턴 문자열을 regex Pattern 목록으로 컴파일한다.
+     * glob: * → .*, ? → ., 나머지는 literal. 대소문자 무시.
+     */
+    private List<Pattern> compileExcludePatterns(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(p -> !p.isEmpty())
+                .map(p -> {
+                    String regex = Arrays.stream(p.split("\\*", -1))
+                            .map(part -> Arrays.stream(part.split("\\?", -1))
+                                    .map(Pattern::quote)
+                                    .collect(Collectors.joining(".")))
+                            .collect(Collectors.joining(".*"));
+                    return Pattern.compile("^" + regex + "$", Pattern.CASE_INSENSITIVE);
+                })
+                .collect(Collectors.toList());
+    }
+
+    private boolean matchesExclude(String tableName, List<Pattern> patterns) {
+        return patterns.stream().anyMatch(p -> p.matcher(tableName).matches());
+    }
+
+    private List<CatalogTable> fetchTables(Connection conn, String schemaName, Long catalogId,
+                                            List<Pattern> excludePatterns)
             throws SQLException {
         String sql = """
                 SELECT c.relname AS table_name,
@@ -260,10 +294,15 @@ public class CatalogService {
             ps.setString(1, schemaName);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    String tableName = rs.getString("table_name");
+                    if (matchesExclude(tableName, excludePatterns)) {
+                        log.debug("테이블 제외 (패턴 일치): {}", tableName);
+                        continue;
+                    }
                     CatalogTable t = new CatalogTable();
                     t.setCatalogId(catalogId);
                     t.setSchemaName(schemaName);
-                    t.setTableName(rs.getString("table_name"));
+                    t.setTableName(tableName);
                     t.setTableComment(rs.getString("table_comment"));
                     tables.add(t);
                 }

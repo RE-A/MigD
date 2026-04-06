@@ -10,6 +10,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RoutineSearchResult {
+    private Long catalogId;
+    private Long routineId;
     private String schemaName;
     private String routineName;
     private String routineType;

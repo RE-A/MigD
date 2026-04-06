@@ -9,23 +9,13 @@
         .table-list-item { cursor: pointer; }
         .table-list-item.active { background-color: #0d6efd; color: #fff; }
         .table-list-item.active small { color: #cfe2ff !important; }
-        .sidebar { max-height: calc(100vh - 140px); overflow-y: auto; }
+        .sidebar { max-height: calc(100vh - 200px); overflow-y: auto; }
         .column-table th { white-space: nowrap; }
         .badge-pk { background-color: #fd7e14; }
     </style>
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-dark bg-dark mb-4">
-    <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
-        <div class="d-flex gap-2">
-            <a href="/migration" class="btn btn-sm btn-success">이관 실행</a>
-            <a href="/schema" class="btn btn-sm btn-outline-info">스키마 이관</a>
-            <a href="/catalog" class="btn btn-sm btn-warning">스키마 카탈로그</a>
-            <a href="/presets" class="btn btn-sm btn-outline-light">프리셋 목록</a>
-        </div>
-    </div>
-</nav>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
 <div class="container-fluid pb-5">
     <div class="d-flex align-items-center gap-2 mb-3 px-2">
         <a href="/catalog" class="btn btn-outline-secondary btn-sm">← 목록</a>
@@ -45,12 +35,21 @@
                     테이블 목록
                     <span class="badge bg-secondary ms-1" th:text="${catalog.tableCount}"></span>
                 </div>
-                <div class="sidebar">
+                <!-- 검색 필터 -->
+                <div class="px-2 pt-2">
+                    <input type="text" id="tableFilter" class="form-control form-control-sm"
+                           placeholder="테이블명 필터..." oninput="filterTables(this.value)"/>
+                </div>
+                <div class="sidebar mt-1">
                     <div th:if="${#lists.isEmpty(tables)}" class="p-3 text-muted small">테이블 없음</div>
                     <a th:each="tbl : ${tables}"
+                       th:data-id="${tbl.id}"
+                       th:data-name="${tbl.tableName}"
+                       th:data-comment="${tbl.tableComment}"
                        th:href="@{/catalog/{cid}/tables/{tid}(cid=${catalog.id},tid=${tbl.id})}"
                        class="list-group-item list-group-item-action table-list-item py-2 px-3 border-0 border-bottom"
-                       th:classappend="${tbl.id == selectedTableId} ? ' active' : ''">
+                       th:classappend="${tbl.id == selectedTableId} ? ' active' : ''"
+                       onclick="return handleTableClick(event, this)">
                         <th:block th:if="${tbl.tableComment != null}">
                             <span class="d-block small fw-semibold" th:text="${tbl.tableComment}"></span>
                             <span class="d-block" style="font-size:0.75em;opacity:0.75"
@@ -66,51 +65,98 @@
         <!-- 컬럼 목록 -->
         <div class="col-md-9 col-lg-10">
             <div class="card shadow-sm">
-                <div class="card-header py-2 small fw-semibold" th:if="${columns != null}">
+                <div class="card-header py-2 small fw-semibold d-flex align-items-center gap-2" id="colHeader" style="display:none!important">
                     컬럼 목록
-                    <span class="badge bg-secondary ms-1" th:text="${#lists.size(columns)}"></span>
+                    <span class="badge bg-secondary ms-1" id="colCount"></span>
+                    <span class="spinner-border spinner-border-sm ms-2 d-none" id="colSpinner"></span>
                 </div>
-                <div class="card-body p-0" th:if="${columns != null}">
-                    <div th:if="${#lists.isEmpty(columns)}" class="p-4 text-muted small">컬럼 없음</div>
-                    <div class="table-responsive" th:unless="${#lists.isEmpty(columns)}">
-                        <table class="table table-sm table-hover column-table mb-0">
-                            <thead class="table-light">
-                            <tr>
-                                <th>#</th>
-                                <th>컬럼명</th>
-                                <th>타입</th>
-                                <th>Nullable</th>
-                                <th>PK</th>
-                                <th>한글명/설명</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <tr th:each="col : ${columns}">
-                                <td class="text-muted small" th:text="${col.ordinalPosition}"></td>
-                                <td>
-                                    <code th:text="${col.columnName}"></code>
-                                </td>
-                                <td class="text-muted small" th:text="${col.dataType}"></td>
-                                <td>
-                                    <span th:if="${col.nullable}" class="text-muted small">YES</span>
-                                    <span th:unless="${col.nullable}" class="fw-semibold small">NO</span>
-                                </td>
-                                <td>
-                                    <span th:if="${col.pk}" class="badge badge-pk">PK</span>
-                                </td>
-                                <td class="text-muted small" th:text="${col.columnComment}"></td>
-                            </tr>
-                            </tbody>
-                        </table>
+                <div class="card-body p-0" id="colBody">
+                    <div class="card-body text-muted" id="colPlaceholder">
+                        왼쪽에서 테이블을 선택하면 컬럼 목록이 표시됩니다.
                     </div>
-                </div>
-                <div class="card-body text-muted" th:unless="${columns != null}">
-                    왼쪽에서 테이블을 선택하면 컬럼 목록이 표시됩니다.
                 </div>
             </div>
         </div>
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:inline="javascript">
+    const CATALOG_ID = /*[[${catalog.id}]]*/ 0;
+    const INITIAL_TABLE_ID = /*[[${selectedTableId}]]*/ null;
+
+    function filterTables(val) {
+        const lower = val.toLowerCase();
+        document.querySelectorAll('.table-list-item').forEach(el => {
+            const name    = (el.dataset.name    || '').toLowerCase();
+            const comment = (el.dataset.comment || '').toLowerCase();
+            el.style.display = (name.includes(lower) || comment.includes(lower)) ? '' : 'none';
+        });
+    }
+
+    function handleTableClick(e, el) {
+        e.preventDefault();
+        const tableId = el.dataset.id;
+        document.querySelectorAll('.table-list-item').forEach(a => a.classList.remove('active'));
+        el.classList.add('active');
+        history.replaceState(null, '', `/catalog/${CATALOG_ID}/tables/${tableId}`);
+        loadColumns(tableId);
+        return false;
+    }
+
+    function loadColumns(tableId) {
+        const header  = document.getElementById('colHeader');
+        const spinner = document.getElementById('colSpinner');
+        const body    = document.getElementById('colBody');
+        const count   = document.getElementById('colCount');
+        const ph      = document.getElementById('colPlaceholder');
+
+        header.style.removeProperty('display');
+        spinner.classList.remove('d-none');
+        if (ph) ph.remove();
+
+        fetch(`/catalog/${CATALOG_ID}/tables/${tableId}/columns`)
+            .then(r => r.json())
+            .then(cols => {
+                spinner.classList.add('d-none');
+                count.textContent = cols.length;
+                body.innerHTML = renderColumns(cols);
+            })
+            .catch(() => {
+                spinner.classList.add('d-none');
+                body.innerHTML = '<div class="p-3 text-danger small">컬럼 로드 실패</div>';
+            });
+    }
+
+    function renderColumns(cols) {
+        if (!cols.length) return '<div class="p-4 text-muted small">컬럼 없음</div>';
+        const rows = cols.map(c => `
+            <tr>
+                <td class="text-muted small">${c.ordinalPosition}</td>
+                <td><code>${esc(c.columnName)}</code></td>
+                <td class="text-muted small">${esc(c.dataType)}</td>
+                <td>${c.nullable ? '<span class="text-muted small">YES</span>' : '<span class="fw-semibold small">NO</span>'}</td>
+                <td>${c.pk ? '<span class="badge badge-pk">PK</span>' : ''}</td>
+                <td class="text-muted small">${esc(c.columnComment || '')}</td>
+            </tr>`).join('');
+        return `<div class="table-responsive">
+            <table class="table table-sm table-hover column-table mb-0">
+                <thead class="table-light">
+                    <tr><th>#</th><th>컬럼명</th><th>타입</th><th>Nullable</th><th>PK</th><th>한글명/설명</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table></div>`;
+    }
+
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // 초기 로드: URL에 tableId가 있으면 자동으로 컬럼 조회
+    document.addEventListener('DOMContentLoaded', () => {
+        if (INITIAL_TABLE_ID) {
+            loadColumns(INITIAL_TABLE_ID);
+        }
+    });
+</script>
 </body>
 </html>

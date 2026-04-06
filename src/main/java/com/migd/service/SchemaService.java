@@ -162,6 +162,7 @@ public class SchemaService {
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.environment().put("PGPASSWORD", srcPassword);
+        pb.environment().put("PGCLIENTENCODING", "UTF8");
         pb.redirectErrorStream(false);
 
         Process process = pb.start();
@@ -203,6 +204,7 @@ public class SchemaService {
 
     /**
      * pg_dump 출력에서 메타데이터 제거 후 Target DB에 DDL 적용.
+     * dollar-quote($$ 또는 $tag$) 블록 내부의 ';'는 구분자로 취급하지 않는다.
      */
     private int applyDdlToTarget(Connection targetConn, String ddlText) throws SQLException {
         String filtered = Arrays.stream(ddlText.split("\n"))
@@ -212,7 +214,7 @@ public class SchemaService {
                 .filter(line -> !line.equals("COMMIT;"))
                 .collect(Collectors.joining("\n"));
 
-        String[] statements = filtered.split(";");
+        List<String> statements = splitStatements(filtered);
         int count = 0;
         try (Statement stmt = targetConn.createStatement()) {
             for (String sql : statements) {
@@ -225,5 +227,50 @@ public class SchemaService {
             }
         }
         return count;
+    }
+
+    /**
+     * SQL 텍스트를 ';' 기준으로 분리하되, dollar-quote 블록 내부는 건너뛴다.
+     * PostgreSQL dollar-quote: $$ ... $$ 또는 $tag$ ... $tag$
+     */
+    private List<String> splitStatements(String sql) {
+        List<String> result = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        String dollarTag = null;
+        int i = 0;
+        while (i < sql.length()) {
+            char c = sql.charAt(i);
+            if (dollarTag == null) {
+                if (c == '$') {
+                    // $tag$ 패턴 탐색
+                    int end = sql.indexOf('$', i + 1);
+                    if (end > i) {
+                        dollarTag = sql.substring(i, end + 1);
+                        current.append(dollarTag);
+                        i = end + 1;
+                        continue;
+                    }
+                } else if (c == ';') {
+                    String stmt = current.toString().strip();
+                    if (!stmt.isEmpty()) result.add(stmt);
+                    current = new StringBuilder();
+                    i++;
+                    continue;
+                }
+            } else {
+                // dollar-quote 종료 탐색
+                if (sql.startsWith(dollarTag, i)) {
+                    current.append(dollarTag);
+                    i += dollarTag.length();
+                    dollarTag = null;
+                    continue;
+                }
+            }
+            current.append(c);
+            i++;
+        }
+        String last = current.toString().strip();
+        if (!last.isEmpty()) result.add(last);
+        return result;
     }
 }

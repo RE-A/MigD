@@ -26,17 +26,7 @@
     </style>
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-dark bg-dark mb-4">
-    <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
-        <div class="d-flex gap-2">
-            <a href="/migration" class="btn btn-sm btn-success">이관 실행</a>
-            <a href="/schema" class="btn btn-sm btn-outline-info">스키마 이관</a>
-            <a href="/catalog" class="btn btn-sm btn-warning">스키마 카탈로그</a>
-            <a href="/presets" class="btn btn-sm btn-outline-light">프리셋 목록</a>
-        </div>
-    </div>
-</nav>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
 <div class="container-fluid pb-5">
     <div class="d-flex align-items-center gap-2 mb-3 px-2">
         <a href="/catalog" class="btn btn-outline-secondary btn-sm">← 목록</a>
@@ -100,6 +90,23 @@
 
                 <!-- 참조 분석 -->
                 <div class="row g-3">
+                    <!-- 타 스키마 참조 -->
+                    <div class="col-12" th:if="${crossSchemaRefs != null and !#lists.isEmpty(crossSchemaRefs)}">
+                        <div class="card shadow-sm border-warning">
+                            <div class="card-header py-2 small fw-semibold text-warning-emphasis bg-warning-subtle">
+                                타 스키마 참조
+                                <span class="badge bg-warning text-dark ms-1" th:text="${#lists.size(crossSchemaRefs)}"></span>
+                                <small class="fw-normal ms-1">(카탈로그에 미등록 — 링크 없음)</small>
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="d-flex flex-wrap gap-2">
+                                    <span th:each="ref : ${crossSchemaRefs}"
+                                          class="badge bg-warning text-dark"
+                                          th:text="${ref}"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <!-- 참조 테이블 -->
                     <div class="col-md-6">
                         <div class="card shadow-sm h-100">

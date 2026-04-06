@@ -11,6 +11,9 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
 }
 
+compileJava.options.encoding = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
 configurations {
     compileOnly {
         extendsFrom annotationProcessor

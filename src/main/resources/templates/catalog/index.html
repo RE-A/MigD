@@ -7,17 +7,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
 </head>
 <body class="bg-light">
-<nav class="navbar navbar-dark bg-dark mb-4">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="/">⚡ MigD</a>
-        <div class="d-flex gap-2">
-            <a href="/migration" class="btn btn-sm btn-success">이관 실행</a>
-            <a href="/schema" class="btn btn-sm btn-outline-info">스키마 이관</a>
-            <a href="/catalog" class="btn btn-sm btn-warning">스키마 카탈로그</a>
-            <a href="/presets" class="btn btn-sm btn-outline-light">프리셋 목록</a>
-        </div>
-    </div>
-</nav>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
 <div class="container pb-5">
 
     <div th:if="${success}" class="alert alert-success alert-dismissible fade show">
@@ -79,15 +69,31 @@
                 소스 DB의 스키마를 분석하여 테이블·컬럼·프로시저 정보를 저장합니다.
                 재분석은 시간이 소요되므로 변경 사항이 있을 때만 실행하세요.
             </p>
-            <form id="analyzeForm" th:action="@{/catalog/analyze}" method="post"
-                  class="d-flex gap-2 align-items-end">
-                <div class="flex-grow-1">
-                    <input type="text" id="schemaNameInput" name="schemaName"
-                           class="form-control form-control-sm" placeholder="스키마명 (예: hr, public)"
-                           required autocomplete="off"/>
+            <form id="analyzeForm" th:action="@{/catalog/analyze}" method="post">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">스키마명 <span class="text-danger">*</span></label>
+                        <input type="text" id="schemaNameInput" name="schemaName"
+                               class="form-control form-control-sm" placeholder="hr, public, ..."
+                               required autocomplete="off"/>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">테이블 제외 패턴 <span class="text-muted">(선택)</span></label>
+                        <input type="text" name="excludePattern"
+                               class="form-control form-control-sm"
+                               placeholder="tmp_*, *_bak, log?_*"/>
+                        <div class="form-text" style="font-size:0.78em; line-height:1.4">
+                            <code>*</code> 임의 문자열 &nbsp;·&nbsp;
+                            <code>?</code> 단일 문자 &nbsp;·&nbsp;
+                            <code>,</code> 패턴 구분 (대소문자 무시)<br>
+                            예) <code>tmp_*</code> → tmp_로 시작 &nbsp;·&nbsp; <code>*_bak</code> → _bak으로 끝 &nbsp;·&nbsp; <code>log?_*</code> → log1_abc, logX_data 등
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-secondary btn-sm w-100" id="analyzeBtn"
+                                onclick="handleAnalyzeSubmit()">분석 시작</button>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-secondary btn-sm flex-shrink-0" id="analyzeBtn"
-                        onclick="handleAnalyzeSubmit()">분석 시작</button>
             </form>
         </div>
     </div>

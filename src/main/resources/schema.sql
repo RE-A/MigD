@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS CATALOG_ROUTINE
 ALTER TABLE CATALOG_TABLE ADD COLUMN IF NOT EXISTS table_comment VARCHAR(500);
 
 CREATE INDEX IF NOT EXISTS idx_ct_catalog_id    ON CATALOG_TABLE   (catalog_id);
+CREATE INDEX IF NOT EXISTS idx_ct_table_name    ON CATALOG_TABLE   (catalog_id, table_name);
 CREATE INDEX IF NOT EXISTS idx_cc_catalog_lower ON CATALOG_COLUMN  (catalog_id, column_name_lower);
 CREATE INDEX IF NOT EXISTS idx_cc_table_id      ON CATALOG_COLUMN  (catalog_table_id);
 CREATE INDEX IF NOT EXISTS idx_cr_catalog_id    ON CATALOG_ROUTINE (catalog_id);
