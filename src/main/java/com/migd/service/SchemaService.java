@@ -5,6 +5,7 @@ import com.migd.dto.DbConnInfo;
 import com.migd.dto.FullSchemaDumpResult;
 import com.migd.dto.SchemaResult;
 import com.migd.util.JdbcConnectionUtil;
+import com.migd.util.SqlSplitter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,9 +19,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -64,6 +63,16 @@ public class SchemaService {
         } catch (Exception e) {
             log.error("전체 스키마 Dump 실패: schema={}", schemaName, e);
             return new FullSchemaDumpResult(schemaName, false, e.getMessage(), 0);
+        }
+    }
+
+    /**
+     * pg_dump로 추출한 DDL 문자열을 Target DB에 직접 적용.
+     * execInContainer 등으로 외부에서 DDL을 얻은 경우 사용.
+     */
+    public int applyDdlText(DbConnInfo tgt, String ddlText) throws SQLException {
+        try (Connection conn = JdbcConnectionUtil.open(tgt)) {
+            return applyDdlToTarget(conn, ddlText);
         }
     }
 
@@ -211,14 +220,8 @@ public class SchemaService {
      * dollar-quote($$ 또는 $tag$) 블록 내부의 ';'는 구분자로 취급하지 않는다.
      */
     private int applyDdlToTarget(Connection targetConn, String ddlText) throws SQLException {
-        String filtered = Arrays.stream(ddlText.split("\n"))
-                .filter(line -> !line.startsWith("--"))
-                .filter(line -> !line.startsWith("SET "))
-                .filter(line -> !line.equals("BEGIN;"))
-                .filter(line -> !line.equals("COMMIT;"))
-                .collect(Collectors.joining("\n"));
-
-        List<String> statements = splitStatements(filtered);
+        String filtered = SqlSplitter.filterDdlLines(ddlText);
+        List<String> statements = SqlSplitter.splitStatements(filtered);
         int count = 0;
         try (Statement stmt = targetConn.createStatement()) {
             for (String sql : statements) {
@@ -233,48 +236,4 @@ public class SchemaService {
         return count;
     }
 
-    /**
-     * SQL 텍스트를 ';' 기준으로 분리하되, dollar-quote 블록 내부는 건너뛴다.
-     * PostgreSQL dollar-quote: $$ ... $$ 또는 $tag$ ... $tag$
-     */
-    private List<String> splitStatements(String sql) {
-        List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        String dollarTag = null;
-        int i = 0;
-        while (i < sql.length()) {
-            char c = sql.charAt(i);
-            if (dollarTag == null) {
-                if (c == '$') {
-                    // $tag$ 패턴 탐색
-                    int end = sql.indexOf('$', i + 1);
-                    if (end != -1) {
-                        dollarTag = sql.substring(i, end + 1);
-                        current.append(dollarTag);
-                        i = end + 1;
-                        continue;
-                    }
-                } else if (c == ';') {
-                    String stmt = current.toString().strip();
-                    if (!stmt.isEmpty()) result.add(stmt);
-                    current = new StringBuilder();
-                    i++;
-                    continue;
-                }
-            } else {
-                // dollar-quote 종료 탐색
-                if (sql.startsWith(dollarTag, i)) {
-                    current.append(dollarTag);
-                    i += dollarTag.length();
-                    dollarTag = null;
-                    continue;
-                }
-            }
-            current.append(c);
-            i++;
-        }
-        String last = current.toString().strip();
-        if (!last.isEmpty()) result.add(last);
-        return result;
-    }
 }
