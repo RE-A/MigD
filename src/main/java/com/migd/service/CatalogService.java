@@ -366,8 +366,9 @@ public class CatalogService {
                                               Map<String, String> comments, Long catalogId)
             throws SQLException {
         String sql = """
-                SELECT column_name, data_type, ordinal_position,
-                       is_nullable
+                SELECT column_name, data_type, ordinal_position, is_nullable,
+                       character_maximum_length,
+                       numeric_precision, numeric_scale
                 FROM information_schema.columns
                 WHERE table_schema = ? AND table_name = ?
                 ORDER BY ordinal_position
@@ -386,7 +387,11 @@ public class CatalogService {
                     col.setTableName(table.getTableName());
                     col.setColumnName(colName);
                     col.setColumnNameLower(colName.toLowerCase());
-                    col.setDataType(rs.getString("data_type"));
+                    col.setDataType(buildFullType(
+                            rs.getString("data_type"),
+                            rs.getInt("character_maximum_length"),
+                            rs.getInt("numeric_precision"),
+                            rs.getInt("numeric_scale")));
                     col.setOrdinalPosition(rs.getInt("ordinal_position"));
                     col.setNullable("YES".equalsIgnoreCase(rs.getString("is_nullable")));
                     col.setPk(pkCols.contains(colName));
@@ -396,6 +401,20 @@ public class CatalogService {
             }
         }
         return cols;
+    }
+
+    private static String buildFullType(String dataType, int charMaxLen,
+                                        int numericPrecision, int numericScale) {
+        return switch (dataType) {
+            case "character varying" -> charMaxLen > 0 ? "varchar(" + charMaxLen + ")" : "varchar";
+            case "character"         -> charMaxLen > 0 ? "char(" + charMaxLen + ")" : "char";
+            case "numeric", "decimal" -> numericPrecision > 0
+                    ? (numericScale > 0
+                        ? dataType + "(" + numericPrecision + "," + numericScale + ")"
+                        : dataType + "(" + numericPrecision + ")")
+                    : dataType;
+            default -> dataType;
+        };
     }
 
     private List<CatalogRoutine> fetchRoutines(Connection conn, String schemaName, Long catalogId)

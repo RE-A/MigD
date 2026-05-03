@@ -7,6 +7,7 @@ import com.migd.domain.SchemaCatalog;
 import com.migd.dto.ColumnSearchResult;
 import com.migd.dto.RoutineSearchResult;
 import com.migd.service.CatalogService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,11 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -135,6 +141,55 @@ public class CatalogController {
         model.addAttribute("crossSchemaRefs", refs.get("crossSchemaRefs"));
         model.addAttribute("catalogs", catalogService.findAllCatalogs());
         return "catalog/routines";
+    }
+
+    /**
+     * 컬럼 검색 결과 CSV 다운로드.
+     * Excel 한글 호환을 위해 UTF-8 BOM(EF BB BF) 포함.
+     */
+    @GetMapping("/search/export")
+    public void exportColumnResults(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long catalogId,
+            HttpServletResponse response) throws IOException {
+
+        if (keyword == null || keyword.isBlank()) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "keyword required");
+            return;
+        }
+
+        List<ColumnSearchResult> results = catalogService.searchByColumnName(catalogId, keyword.trim());
+
+        String filename = "catalog_columns_"
+                + keyword.replaceAll("[^a-zA-Z0-9가-힣_-]", "_") + ".csv";
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition",
+                "attachment; filename*=UTF-8''"
+                        + java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8));
+
+        OutputStream out = response.getOutputStream();
+        out.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        writer.println("스키마,테이블,컬럼명,타입,PK,한글명/설명");
+        for (ColumnSearchResult r : results) {
+            writer.printf("%s,%s,%s,%s,%s,%s%n",
+                    escapeCsv(r.getSchemaName()),
+                    escapeCsv(r.getTableName()),
+                    escapeCsv(r.getColumnName()),
+                    escapeCsv(r.getDataType()),
+                    r.isPk() ? "Y" : "",
+                    escapeCsv(r.getColumnComment() != null ? r.getColumnComment() : ""));
+        }
+        writer.flush();
+    }
+
+    private static String escapeCsv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 
     /**

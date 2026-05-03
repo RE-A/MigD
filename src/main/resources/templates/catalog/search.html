@@ -79,6 +79,11 @@
             <h6 class="fw-semibold mb-2">
                 테이블 · 컬럼
                 <span class="badge bg-secondary ms-1" th:text="${#lists.size(columnResults)}"></span>
+                <a th:if="${!#lists.isEmpty(columnResults)}"
+                   th:href="@{/catalog/search/export(keyword=${keyword},catalogId=${catalogId})}"
+                   class="btn btn-outline-success btn-sm ms-2" style="font-size:0.75rem">
+                    &#8595; CSV 다운로드
+                </a>
             </h6>
             <div th:if="${#lists.isEmpty(columnResults)}" class="text-muted small ps-1">일치하는 컬럼 없음</div>
             <div class="table-responsive" th:unless="${#lists.isEmpty(columnResults)}">
